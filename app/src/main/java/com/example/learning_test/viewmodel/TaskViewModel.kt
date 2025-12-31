@@ -31,15 +31,19 @@ class TaskViewModel : ViewModel() {
     fun refreshTopics() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val topics = client.from("tasks")
-                    .select(columns = Columns.list("topic")) {
-                        order("topic", order = Order.ASCENDING)
+                // Fetch all tasks ordered by id descending (newest first)
+                val tasks = client.from("tasks")
+                    .select(columns = Columns.list("id", "content", "is_complete", "topic")) {
+                        order("id", order = Order.DESCENDING)
                     }
-                    .decodeList<Map<String, String>>()
-                    .mapNotNull { it["topic"] }
+                    .decodeList<Task>()
+
+                // Get unique topics in the order they first appear (newest first)
+                val orderedTopics = tasks
+                    .map { it.topic }
                     .distinct()
 
-                _topics.value = topics
+                _topics.value = orderedTopics
             } catch (e: Exception) {
                 println("Error fetching topics: ${e.message}")
                 _topics.value = emptyList()
@@ -122,6 +126,20 @@ class TaskViewModel : ViewModel() {
                 readTasks(topic)
             } catch (e: Exception) {
                 println("Error deleting: ${e.message}")
+            }
+        }
+    }
+
+    // --- DELETE ALL TASKS IN TOPIC ---
+    fun deleteAllTasksInTopic(topic: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                client.from("tasks").delete {
+                    filter { eq("topic", topic) }
+                }
+                readTasks(topic)
+            } catch (e: Exception) {
+                println("Error deleting all tasks: ${e.message}")
             }
         }
     }

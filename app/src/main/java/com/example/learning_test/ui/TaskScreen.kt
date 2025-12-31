@@ -1,8 +1,13 @@
 package com.example.learning_test.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -13,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.example.learning_test.Models.Task
@@ -27,18 +33,19 @@ fun TaskScreen(
 ) {
     val uiState by viewModel.state.collectAsState()
     var newTaskText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
 
     // Load tasks for this topic when the screen is first displayed
     LaunchedEffect(topic) {
         viewModel.readTasks(topic)
     }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = modifier.fillMaxSize().padding(16.dp).imePadding()) {
 
         // Back button and Topic Header
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth()
         ) {
             IconButton(onClick = onBackPressed) {
                 Icon(
@@ -54,13 +61,50 @@ fun TaskScreen(
             )
         }
 
+        // Action buttons row (Delete All on the left)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            // Delete All Tasks button - small and on the left
+            Button(
+                onClick = { viewModel.deleteAllTasksInTopic(topic) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.height(28.dp)
+            ) {
+                Text("Delete All Tasks", style = MaterialTheme.typography.labelSmall, color = Color.White)
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Archive Topic button
+            Button(
+                onClick = { /* TODO: Add archive logic */ },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.height(28.dp)
+            ) {
+                Text("Archive Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
+            }
+        }
+
         // --- INPUT ROW (CREATE) ---
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = newTaskText,
                 onValueChange = { newTaskText = it },
                 label = { Text("New Task") },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (newTaskText.isNotBlank()) {
+                            viewModel.createTask(newTaskText, topic)
+                            newTaskText = ""
+                        }
+                    }
+                )
             )
             Spacer(modifier = Modifier.width(8.dp))
             Button(onClick = {
@@ -80,8 +124,8 @@ fun TaskScreen(
             is UiState.Loading -> CircularProgressIndicator()
             is UiState.Error -> Text("Error: ${currentState.message}", color = Color.Red)
             is UiState.Success -> {
-                LazyColumn {
-                    items(currentState.tasks) { task ->
+                LazyColumn(state = listState) {
+                    items(currentState.tasks, key = { it.id ?: 0 }) { task ->
                         TaskItem(
                             task = task,
                             onToggle = { viewModel.updateTask(task) },
