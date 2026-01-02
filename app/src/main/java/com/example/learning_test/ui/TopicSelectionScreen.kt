@@ -1,29 +1,41 @@
 package com.example.learning_test.ui
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.example.learning_test.Models.Topic
+import com.example.learning_test.ui.theme.DarkRed
 import com.example.learning_test.viewmodel.TaskViewModel
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @Composable
 fun TopicSelectionScreen(
     viewModel: TaskViewModel,
-    onTopicSelected: (String) -> Unit,
+    onTopicSelected: (Topic) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val topics by viewModel.topics.collectAsState()
     var newTopicText by remember { mutableStateOf("") }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var topicToDelete by remember { mutableStateOf<Topic?>(null) }
+    val listState = rememberLazyListState()
 
     // Refresh topics when screen is displayed
     LaunchedEffect(Unit) {
@@ -73,30 +85,75 @@ fun TopicSelectionScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            LazyColumn {
-                items(topics) { topic ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable { onTopicSelected(topic) }
-                    ) {
-                        Row(
+            val reorderableLazyListState = rememberReorderableLazyListState(listState) { from, to ->
+                viewModel.reorderTopics(from.index, to.index)
+            }
+
+            LazyColumn(state = listState) {
+                items(topics, key = { it.id ?: it.name }) { topic ->
+                    ReorderableItem(reorderableLazyListState, key = topic.id ?: topic.name) { isDragging ->
+                        val elevation by animateDpAsState(if (isDragging) 8.dp else 2.dp, label = "elevation")
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(vertical = 4.dp)
+                                .clickable { onTopicSelected(topic) },
+                            elevation = CardDefaults.cardElevation(defaultElevation = elevation)
                         ) {
-                            Icon(
-                                Icons.Default.ArrowForward,
-                                contentDescription = "Topic",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(
-                                text = topic,
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                            ) {
+                                // Top row: Drag handle, topic name, action icons
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Drag handle
+                                    Icon(
+                                        imageVector = Icons.Default.Menu,
+                                        contentDescription = "Drag to reorder",
+                                        modifier = Modifier.draggableHandle(),
+                                        tint = Color.Gray
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = topic.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    // Archive Topic icon (box with arrow)
+                                    IconButton(
+                                        onClick = { topic.id?.let { viewModel.archiveTopic(it) } },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Archive,
+                                            contentDescription = "Archive Topic",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    // Delete All Tasks icon
+                                    IconButton(
+                                        onClick = {
+                                            topicToDelete = topic
+                                            showDeleteConfirmDialog = true
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete All Tasks",
+                                            tint = DarkRed,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -121,7 +178,9 @@ fun TopicSelectionScreen(
                 Button(
                     onClick = {
                         if (newTopicText.isNotBlank()) {
-                            onTopicSelected(newTopicText)
+                            viewModel.createTopic(newTopicText) { createdTopic ->
+                                onTopicSelected(createdTopic)
+                            }
                             newTopicText = ""
                             showCreateDialog = false
                         }
@@ -134,6 +193,40 @@ fun TopicSelectionScreen(
                 Button(onClick = {
                     newTopicText = ""
                     showCreateDialog = false
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Delete Confirmation Dialog
+    if (showDeleteConfirmDialog && topicToDelete != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteConfirmDialog = false
+                topicToDelete = null
+            },
+            title = { Text("Delete Topic?") },
+            text = {
+                Text("Are you sure you want to delete \"${topicToDelete?.name}\" and all its tasks? This action cannot be undone.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        topicToDelete?.id?.let { viewModel.deleteTopic(it) }
+                        showDeleteConfirmDialog = false
+                        topicToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkRed)
+                ) {
+                    Text("Delete", color = Color.White)
+                }
+            },
+            dismissButton = {
+                Button(onClick = {
+                    showDeleteConfirmDialog = false
+                    topicToDelete = null
                 }) {
                     Text("Cancel")
                 }

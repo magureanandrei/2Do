@@ -3,15 +3,6 @@
   <component name="CopilotDiffPersistence">
     <option name="pendingDiffs">
       <map>
-        <entry key="$PROJECT_DIR$/app/src/main/java/com/example/learning_test/Models/Task.kt">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/app/src/main/java/com/example/learning_test/Models/Task.kt" />
-              <option name="originalContent" value="package com.example.learning_test.Models&#10;&#10;import kotlinx.serialization.Serializable&#10;&#10;@Serializable&#10;data class Task(&#10;    val id: Int? = null, // Nullable because Supabase generates ID on creation&#10;    val content: String,&#10;    val is_complete: Boolean = false,&#10;    val topic: String = &quot;General&quot;&#10;)" />
-              <option name="updatedContent" value="package com.example.learning_test.Models&#10;&#10;import kotlinx.serialization.Serializable&#10;&#10;@Serializable&#10;data class Task(&#10;    val id: Int? = null, // Nullable because Supabase generates ID on creation&#10;    val content: String,&#10;    val is_complete: Boolean = false,&#10;    val topic: String = &quot;General&quot;&#10;)" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
         <entry key="$PROJECT_DIR$/app/src/main/java/com/example/learning_test/ui/UiState.kt">
           <value>
             <PendingDiffInfo>
