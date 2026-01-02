@@ -4,10 +4,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class Task(
+data class Topic(
     val id: Int? = null,
-    val content: String,
-    @SerialName("is_complete") val isComplete: Boolean = false,
+    val name: String,
     @SerialName("sort_order") val sortOrder: Int = 0,
-    @SerialName("topic_id") val topicId: Int
+    @SerialName("is_archived") val isArchived: Boolean = false
 )
+

@@ -13,6 +13,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.learning_test.Models.Topic
+import com.example.learning_test.ui.ArchivedTopicsScreen
 import com.example.learning_test.ui.TaskScreen
 import com.example.learning_test.ui.TopicSelectionScreen
 import com.example.learning_test.ui.theme.Learning_testTheme
@@ -27,6 +29,9 @@ class MainActivity : ComponentActivity() {
                 val viewModel = remember { TaskViewModel() }
                 val navController = rememberNavController()
 
+                // Store selected topic for navigation
+                var selectedTopic by remember { mutableStateOf<Topic?>(null) }
+
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     NavHost(
                         navController = navController,
@@ -38,22 +43,51 @@ class MainActivity : ComponentActivity() {
                             TopicSelectionScreen(
                                 viewModel = viewModel,
                                 onTopicSelected = { topic ->
-                                    navController.navigate("task_screen/$topic")
+                                    selectedTopic = topic
+                                    navController.navigate("task_screen/${topic.id}")
+                                },
+                                onArchiveClicked = {
+                                    navController.navigate("archived_topics_screen")
                                 }
                             )
                         }
 
-                        // Task Screen with topic parameter
-                        composable(
-                            route = "task_screen/{topic}",
-                            arguments = listOf(navArgument("topic") { type = NavType.StringType })
-                        ) { backStackEntry ->
-                            val topic = backStackEntry.arguments?.getString("topic") ?: "General"
-                            TaskScreen(
+                        // Archived Topics Screen
+                        composable("archived_topics_screen") {
+                            ArchivedTopicsScreen(
                                 viewModel = viewModel,
-                                topic = topic,
-                                onBackPressed = { navController.navigateUp() }
+                                onBackPressed = { navController.navigateUp() },
+                                onTopicSelected = { topic ->
+                                    selectedTopic = topic
+                                    navController.navigate("task_screen/${topic.id}")
+                                }
                             )
+                        }
+
+                        // Task Screen with topic id parameter
+                        composable(
+                            route = "task_screen/{topicId}",
+                            arguments = listOf(navArgument("topicId") { type = NavType.IntType })
+                        ) { backStackEntry ->
+                            val topicId = backStackEntry.arguments?.getInt("topicId") ?: 0
+                            // Use the stored topic or find it from viewModel (check both regular and archived)
+                            val topics by viewModel.topics.collectAsState()
+                            val archivedTopics by viewModel.archivedTopics.collectAsState()
+                            val topic = selectedTopic
+                                ?: topics.find { it.id == topicId }
+                                ?: archivedTopics.find { it.id == topicId }
+
+                            topic?.let {
+                                TaskScreen(
+                                    viewModel = viewModel,
+                                    topic = it,
+                                    onBackPressed = { navController.navigateUp() },
+                                    onTopicRenamed = { newName ->
+                                        // Update the selected topic with new name
+                                        selectedTopic = it.copy(name = newName)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
