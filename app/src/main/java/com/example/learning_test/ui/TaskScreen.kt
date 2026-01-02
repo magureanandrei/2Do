@@ -1,5 +1,6 @@
 package com.example.learning_test.ui
 
+import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -66,6 +69,7 @@ fun TaskScreen(
     var editedTopicName by remember { mutableStateOf(TextFieldValue(topic.name)) }
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
 
     // Helper function to create task and flag scroll to top
     fun createTaskAndScrollToTop() {
@@ -187,18 +191,43 @@ fun TaskScreen(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.Start
         ) {
-            // Archive Topic button
-            Button(
-                onClick = { topic.id?.let { viewModel.archiveTopic(it) }; onBackPressed() },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                modifier = Modifier.height(28.dp)
-            ) {
-                Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Archive Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
+            // Archive Topic button - only show for non-archived topics
+            if (!topic.isArchived) {
+                Button(
+                    onClick = {
+                        Toast.makeText(context.applicationContext, "Topic archived", Toast.LENGTH_SHORT).show()
+                        topic.id?.let { viewModel.archiveTopic(it) }
+                        onBackPressed()
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Archive Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            // Restore Topic button - only show for archived topics
+            if (topic.isArchived) {
+                Button(
+                    onClick = {
+                        Toast.makeText(context.applicationContext, "Topic restored", Toast.LENGTH_SHORT).show()
+                        topic.id?.let { viewModel.unarchiveTopic(it) }
+                        onBackPressed()
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Restore Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+            }
 
             // Delete Topic button
             Button(

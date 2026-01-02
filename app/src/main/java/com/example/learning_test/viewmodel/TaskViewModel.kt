@@ -23,6 +23,9 @@ class TaskViewModel : ViewModel() {
     private val _topics = MutableStateFlow<List<Topic>>(emptyList())
     val topics = _topics.asStateFlow()
 
+    private val _archivedTopics = MutableStateFlow<List<Topic>>(emptyList())
+    val archivedTopics = _archivedTopics.asStateFlow()
+
     init {
         refreshTopics()
     }
@@ -42,6 +45,25 @@ class TaskViewModel : ViewModel() {
             } catch (e: Exception) {
                 println("Error fetching topics: ${e.message}")
                 _topics.value = emptyList()
+            }
+        }
+    }
+
+    // --- REFRESH ARCHIVED TOPICS ---
+    fun refreshArchivedTopics() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val topicsList = client.from("topics")
+                    .select {
+                        filter { eq("is_archived", true) }
+                        order("sort_order", order = Order.ASCENDING)
+                    }
+                    .decodeList<Topic>()
+
+                _archivedTopics.value = topicsList
+            } catch (e: Exception) {
+                println("Error fetching archived topics: ${e.message}")
+                _archivedTopics.value = emptyList()
             }
         }
     }
@@ -197,6 +219,7 @@ class TaskViewModel : ViewModel() {
                     filter { eq("id", topicId) }
                 }
                 refreshTopics()
+                refreshArchivedTopics()
                 launch(Dispatchers.Main) {
                     onSuccess()
                 }
@@ -235,8 +258,26 @@ class TaskViewModel : ViewModel() {
                     filter { eq("id", topicId) }
                 }
                 refreshTopics()
+                refreshArchivedTopics()
             } catch (e: Exception) {
                 println("Error archiving topic: ${e.message}")
+            }
+        }
+    }
+
+    // --- UNARCHIVE TOPIC ---
+    fun unarchiveTopic(topicId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                client.from("topics").update(
+                    { set("is_archived", false) }
+                ) {
+                    filter { eq("id", topicId) }
+                }
+                refreshTopics()
+                refreshArchivedTopics()
+            } catch (e: Exception) {
+                println("Error unarchiving topic: ${e.message}")
             }
         }
     }

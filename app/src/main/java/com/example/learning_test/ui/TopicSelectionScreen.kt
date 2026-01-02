@@ -1,5 +1,6 @@
 package com.example.learning_test.ui
 
+import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.learning_test.Models.Topic
 import com.example.learning_test.ui.theme.DarkRed
@@ -28,6 +30,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 fun TopicSelectionScreen(
     viewModel: TaskViewModel,
     onTopicSelected: (Topic) -> Unit,
+    onArchiveClicked: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val topics by viewModel.topics.collectAsState()
@@ -36,6 +39,7 @@ fun TopicSelectionScreen(
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var topicToDelete by remember { mutableStateOf<Topic?>(null) }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
     // Refresh topics when screen is displayed
     LaunchedEffect(Unit) {
@@ -47,10 +51,12 @@ fun TopicSelectionScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // App Title with Logo
+        // App Title with Logo and Archive button
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
         ) {
             Icon(
                 Icons.Default.CheckCircle,
@@ -61,8 +67,17 @@ fun TopicSelectionScreen(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "2Do",
-                style = MaterialTheme.typography.headlineMedium
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.weight(1f)
             )
+            // Archive button
+            IconButton(onClick = onArchiveClicked) {
+                Icon(
+                    Icons.Default.Archive,
+                    contentDescription = "View Archived Topics",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
 
         // Button to create new topic
@@ -126,7 +141,10 @@ fun TopicSelectionScreen(
 
                                     // Archive Topic icon (box with arrow)
                                     IconButton(
-                                        onClick = { topic.id?.let { viewModel.archiveTopic(it) } },
+                                        onClick = {
+                                            Toast.makeText(context.applicationContext, "Topic archived", Toast.LENGTH_SHORT).show()
+                                            topic.id?.let { viewModel.archiveTopic(it) }
+                                        },
                                         modifier = Modifier.size(32.dp)
                                     ) {
                                         Icon(

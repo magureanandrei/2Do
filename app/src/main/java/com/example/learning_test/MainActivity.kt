@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.learning_test.Models.Topic
+import com.example.learning_test.ui.ArchivedTopicsScreen
 import com.example.learning_test.ui.TaskScreen
 import com.example.learning_test.ui.TopicSelectionScreen
 import com.example.learning_test.ui.theme.Learning_testTheme
@@ -44,6 +45,21 @@ class MainActivity : ComponentActivity() {
                                 onTopicSelected = { topic ->
                                     selectedTopic = topic
                                     navController.navigate("task_screen/${topic.id}")
+                                },
+                                onArchiveClicked = {
+                                    navController.navigate("archived_topics_screen")
+                                }
+                            )
+                        }
+
+                        // Archived Topics Screen
+                        composable("archived_topics_screen") {
+                            ArchivedTopicsScreen(
+                                viewModel = viewModel,
+                                onBackPressed = { navController.navigateUp() },
+                                onTopicSelected = { topic ->
+                                    selectedTopic = topic
+                                    navController.navigate("task_screen/${topic.id}")
                                 }
                             )
                         }
@@ -54,9 +70,12 @@ class MainActivity : ComponentActivity() {
                             arguments = listOf(navArgument("topicId") { type = NavType.IntType })
                         ) { backStackEntry ->
                             val topicId = backStackEntry.arguments?.getInt("topicId") ?: 0
-                            // Use the stored topic or find it from viewModel
+                            // Use the stored topic or find it from viewModel (check both regular and archived)
                             val topics by viewModel.topics.collectAsState()
-                            val topic = selectedTopic ?: topics.find { it.id == topicId }
+                            val archivedTopics by viewModel.archivedTopics.collectAsState()
+                            val topic = selectedTopic
+                                ?: topics.find { it.id == topicId }
+                                ?: archivedTopics.find { it.id == topicId }
 
                             topic?.let {
                                 TaskScreen(
