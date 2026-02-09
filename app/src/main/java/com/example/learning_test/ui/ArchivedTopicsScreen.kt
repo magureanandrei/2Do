@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.learning_test.Models.Topic
+import com.example.learning_test.data.local.TopicEntity
 import com.example.learning_test.ui.theme.DarkRed
 import com.example.learning_test.viewmodel.TaskViewModel
 
@@ -26,18 +26,14 @@ import com.example.learning_test.viewmodel.TaskViewModel
 fun ArchivedTopicsScreen(
     viewModel: TaskViewModel,
     onBackPressed: () -> Unit,
-    onTopicSelected: (Topic) -> Unit,
+    onTopicSelected: (TopicEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val archivedTopics by viewModel.archivedTopics.collectAsState()
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
-    var topicToDelete by remember { mutableStateOf<Topic?>(null) }
+    var topicToDelete by remember { mutableStateOf<TopicEntity?>(null) }
     val context = LocalContext.current
 
-    // Refresh archived topics when screen is displayed
-    LaunchedEffect(Unit) {
-        viewModel.refreshArchivedTopics()
-    }
 
     Column(
         modifier = modifier
@@ -79,7 +75,7 @@ fun ArchivedTopicsScreen(
             )
         } else {
             LazyColumn {
-                items(archivedTopics, key = { it.id ?: it.name }) { topic ->
+                items(archivedTopics, key = { it.id }) { topic ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -113,7 +109,7 @@ fun ArchivedTopicsScreen(
                                 IconButton(
                                     onClick = {
                                         Toast.makeText(context.applicationContext, "Topic restored", Toast.LENGTH_SHORT).show()
-                                        topic.id?.let { viewModel.unarchiveTopic(it) }
+                                        viewModel.unarchiveTopic(topic.id)
                                     },
                                     modifier = Modifier.size(32.dp)
                                 ) {
@@ -149,7 +145,8 @@ fun ArchivedTopicsScreen(
     }
 
     // Delete Confirmation Dialog
-    if (showDeleteConfirmDialog && topicToDelete != null) {
+    if (showDeleteConfirmDialog) {
+        topicToDelete?.let { topic ->
         AlertDialog(
             onDismissRequest = {
                 showDeleteConfirmDialog = false
@@ -157,12 +154,12 @@ fun ArchivedTopicsScreen(
             },
             title = { Text("Delete Topic?") },
             text = {
-                Text("Are you sure you want to delete \"${topicToDelete?.name}\" and all its tasks? This action cannot be undone.")
+                    Text("Are you sure you want to delete \"${topic.name}\" and all its tasks? This action cannot be undone.")
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        topicToDelete?.id?.let { viewModel.deleteTopic(it) }
+                            viewModel.deleteTopic(topic.id)
                         showDeleteConfirmDialog = false
                         topicToDelete = null
                     },
@@ -181,5 +178,6 @@ fun ArchivedTopicsScreen(
             }
         )
     }
+}
 }
 

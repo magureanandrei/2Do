@@ -14,9 +14,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
@@ -36,8 +36,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.learning_test.Models.Task
-import com.example.learning_test.Models.Topic
+import com.example.learning_test.data.local.TaskEntity
+import com.example.learning_test.data.local.TopicEntity
 import com.example.learning_test.ui.theme.DarkRed
 import com.example.learning_test.viewmodel.TaskViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -46,7 +46,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 @Composable
 fun TaskScreen(
     viewModel: TaskViewModel,
-    topic: Topic,
+    topic: TopicEntity,
     modifier: Modifier = Modifier,
     onBackPressed: () -> Unit = {},
     onTopicRenamed: (String) -> Unit = {}
@@ -74,10 +74,8 @@ fun TaskScreen(
     // Helper function to create task and flag scroll to top
     fun createTaskAndScrollToTop() {
         if (newTaskText.isNotBlank()) {
-            topic.id?.let {
-                viewModel.createTask(newTaskText, it)
-                shouldScrollToTop = true
-            }
+            viewModel.createTask(newTaskText, topic.id)
+            shouldScrollToTop = true
             newTaskText = ""
         }
     }
@@ -100,7 +98,7 @@ fun TaskScreen(
 
     // Load tasks for this topic when the screen is first displayed
     LaunchedEffect(topic.id) {
-        topic.id?.let { viewModel.readTasks(it) }
+        viewModel.readTasks(topic.id)
     }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp).imePadding()) {
@@ -112,7 +110,7 @@ fun TaskScreen(
         ) {
             IconButton(onClick = onBackPressed) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = MaterialTheme.colorScheme.primary
                 )
@@ -150,11 +148,8 @@ fun TaskScreen(
                                 onDone = {
                                     val newName = editedTopicName.text.trim()
                                     if (newName.isNotBlank() && newName != topic.name) {
-                                        topic.id?.let { id ->
-                                            viewModel.renameTopic(id, newName) { renamedTopic ->
-                                                onTopicRenamed(renamedTopic)
-                                            }
-                                        }
+                                        viewModel.updateTopicName(topic.id, newName)
+                                        onTopicRenamed(newName)
                                     }
                                     isEditingTopicName = false
                                     focusManager.clearFocus()
@@ -196,7 +191,7 @@ fun TaskScreen(
                 Button(
                     onClick = {
                         Toast.makeText(context.applicationContext, "Topic archived", Toast.LENGTH_SHORT).show()
-                        topic.id?.let { viewModel.archiveTopic(it) }
+                        viewModel.archiveTopic(topic.id)
                         onBackPressed()
                     },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
@@ -215,7 +210,7 @@ fun TaskScreen(
                 Button(
                     onClick = {
                         Toast.makeText(context.applicationContext, "Topic restored", Toast.LENGTH_SHORT).show()
-                        topic.id?.let { viewModel.unarchiveTopic(it) }
+                        viewModel.unarchiveTopic(topic.id)
                         onBackPressed()
                     },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
@@ -269,31 +264,21 @@ fun TaskScreen(
             is UiState.Error -> Text("Error: ${currentState.message}", color = Color.Red)
             is UiState.Success -> {
                 val reorderableLazyListState = rememberReorderableLazyListState(listState) { from, to ->
-                    topic.id?.let { topicId ->
-                        viewModel.reorderTasks(topicId, from.index, to.index)
-                    }
+                    viewModel.reorderTasks(from.index, to.index)
                 }
 
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    items(currentState.tasks, key = { it.id ?: 0 }) { task ->
-                        ReorderableItem(reorderableLazyListState, key = task.id ?: 0) { isDragging ->
+                    items(currentState.tasks, key = { it.id }) { task ->
+                        ReorderableItem(reorderableLazyListState, key = task.id) { isDragging ->
                             val elevation by animateDpAsState(if (isDragging) 8.dp else 2.dp, label = "elevation")
                             TaskItem(
                                 task = task,
                                 onToggle = { viewModel.updateTask(task) },
                                 onEdit = { newContent ->
-                                    task.id?.let { id ->
-                                        topic.id?.let { topicId ->
-                                            viewModel.updateTaskContent(id, newContent, topicId)
-                                        }
-                                    }
+                                    viewModel.updateTaskContent(task.id, newContent)
                                 },
                                 onDelete = {
-                                    task.id?.let { id ->
-                                        topic.id?.let { topicId ->
-                                            viewModel.deleteTask(id, topicId)
-                                        }
-                                    }
+                                    viewModel.deleteTask(task)
                                 },
                                 elevation = elevation,
                                 dragModifier = Modifier.draggableHandle()
@@ -316,10 +301,8 @@ fun TaskScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        topic.id?.let {
-                            viewModel.deleteTopic(it) {
-                                onBackPressed()
-                            }
+                        viewModel.deleteTopic(topic.id) {
+                            onBackPressed()
                         }
                         showDeleteConfirmDialog = false
                     },
@@ -339,18 +322,19 @@ fun TaskScreen(
 
 @Composable
 fun TaskItem(
-    task: Task,
+    task: TaskEntity,
     onToggle: () -> Unit,
     onEdit: (String) -> Unit,
     onDelete: () -> Unit,
     elevation: Dp = 2.dp,
+    modifier: Modifier = Modifier,
     dragModifier: Modifier = Modifier
 ) {
     var showEditDialog by remember { mutableStateOf(false) }
     var editText by remember { mutableStateOf(task.content) }
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = elevation)
