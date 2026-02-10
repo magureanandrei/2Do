@@ -92,8 +92,8 @@ class TaskRepository(private val dao: AppDao) {
 
     // --- CREATE TOPIC ---
     suspend fun createTopic(name: String): TopicEntity {
-        val maxRank = dao.getMaxTopicSortOrder() ?: 0L
-        val newRank = maxRank + 1000
+        val minRank = dao.getMinTopicSortOrder() ?: 0L
+        val newRank = minRank - 1000
 
         // 1. Save Local
         val newEntity = TopicEntity(name = name, sortOrder = newRank, isArchived = false, isSynced = false)
