@@ -92,8 +92,8 @@ class TaskRepository(private val dao: AppDao) {
 
     // --- CREATE TOPIC ---
     suspend fun createTopic(name: String): TopicEntity {
-        val minRank = dao.getMinTopicSortOrder() ?: 100.0
-        val newRank = if (minRank <= 10.0) minRank / 2 else minRank - 100.0
+        val maxRank = dao.getMaxTopicSortOrder() ?: 0L
+        val newRank = maxRank + 1000
 
         // 1. Save Local
         val newEntity = TopicEntity(name = name, sortOrder = newRank, isArchived = false, isSynced = false)
@@ -121,8 +121,8 @@ class TaskRepository(private val dao: AppDao) {
 
     // --- CREATE TASK ---
     suspend fun createTask(content: String, localTopicId: Int) {
-        val maxRank = dao.getMaxTaskSortOrder(localTopicId) ?: 0.0
-        val newRank = maxRank + 100.0
+        val maxRank = dao.getMaxTaskSortOrder(localTopicId) ?: 0L
+        val newRank = maxRank + 1000
 
         val newEntity = TaskEntity(content = content, topicId = localTopicId, sortOrder = newRank, isComplete = false, isSynced = false)
         val localId = dao.insertTask(newEntity).toInt()
@@ -188,7 +188,7 @@ class TaskRepository(private val dao: AppDao) {
     }
 
     // --- REORDER TASK (Drag & Drop) ---
-    suspend fun updateTaskOrder(task: TaskEntity, newRank: Double) {
+    suspend fun updateTaskOrder(task: TaskEntity, newRank: Long) {
         val updatedTask = task.copy(sortOrder = newRank, isSynced = false)
         dao.updateTask(updatedTask)
 
@@ -202,6 +202,28 @@ class TaskRepository(private val dao: AppDao) {
                 }
                 dao.updateTask(updatedTask.copy(isSynced = true))
             } catch (e: Exception) { println("Reorder failed: ${e.message}") }
+        }
+    }
+
+    // --- REBALANCE LOGIC ---
+    suspend fun rebalanceTasks(topicId: Int) {
+        val tasks = dao.getTasksList(topicId) // Must be ordered ASC
+        var currentRank = 1000L
+        tasks.forEach { task ->
+            if (task.sortOrder != currentRank) {
+                val updated = task.copy(sortOrder = currentRank, isSynced = false)
+                dao.updateTask(updated)
+                // Push to Supabase
+                task.supabaseId?.let { sId ->
+                    try {
+                        client.from("tasks").update({ set("sort_order", currentRank) }) {
+                            filter { eq("id", sId) }
+                        }
+                        dao.updateTask(updated.copy(isSynced = true))
+                    } catch (e: Exception) { println(e) }
+                }
+            }
+            currentRank += 1000
         }
     }
 
@@ -230,7 +252,7 @@ class TaskRepository(private val dao: AppDao) {
     }
 
     // --- REORDER TOPIC (Drag & Drop) ---
-    suspend fun updateTopicOrder(topic: TopicEntity, newRank: Double) {
+    suspend fun updateTopicOrder(topic: TopicEntity, newRank: Long) {
         val updatedTopic = topic.copy(sortOrder = newRank, isSynced = false)
         dao.updateTopic(updatedTopic)
 
@@ -321,7 +343,7 @@ class TaskRepository(private val dao: AppDao) {
 data class TopicNetwork(
     val id: Int? = null,
     val name: String,
-    @SerialName("sort_order") val sortOrder: Double,
+    @SerialName("sort_order") val sortOrder: Long,
     @SerialName("is_archived") val isArchived: Boolean
 )
 
@@ -330,6 +352,6 @@ data class TaskNetwork(
     val id: Int? = null,
     val content: String,
     @SerialName("is_complete") val isComplete: Boolean,
-    @SerialName("sort_order") val sortOrder: Double,
+    @SerialName("sort_order") val sortOrder: Long,
     @SerialName("topic_id") val topicId: Int
 )

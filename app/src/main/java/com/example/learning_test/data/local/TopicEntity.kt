@@ -16,7 +16,7 @@ data class TopicEntity(
 
     @SerialName("sort_order") // <--- TELLS SUPABASE: "Map 'sort_order' to this"
     @ColumnInfo(name = "sort_order") // <--- TELLS ROOM: "Map 'sort_order' to this"
-    val sortOrder: Double,
+    val sortOrder: Long,
 
     @SerialName("is_archived")
     @ColumnInfo(name = "is_archived")

@@ -44,6 +44,9 @@ interface AppDao {
     @Query("SELECT * FROM tasks WHERE topic_id = :topicId ORDER BY sort_order ASC")
     fun getTasksForTopic(topicId: Int): Flow<List<TaskEntity>>
 
+    @Query("SELECT * FROM tasks WHERE topic_id = :topicId ORDER BY sort_order ASC")
+    suspend fun getTasksList(topicId: Int): List<TaskEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: TaskEntity): Long
 
@@ -61,8 +64,11 @@ interface AppDao {
 
     // --- HELPERS FOR SORTING ---
     @Query("SELECT MAX(sort_order) FROM tasks WHERE topic_id = :topicId")
-    suspend fun getMaxTaskSortOrder(topicId: Int): Double?
+    suspend fun getMaxTaskSortOrder(topicId: Int): Long?
+
+    @Query("SELECT MAX(sort_order) FROM topics")
+    suspend fun getMaxTopicSortOrder(): Long?
 
     @Query("SELECT MIN(sort_order) FROM topics")
-    suspend fun getMinTopicSortOrder(): Double?
+    suspend fun getMinTopicSortOrder(): Long?
 }

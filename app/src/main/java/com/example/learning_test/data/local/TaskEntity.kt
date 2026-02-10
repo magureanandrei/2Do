@@ -31,7 +31,7 @@ data class TaskEntity(
 
     @SerialName("sort_order")
     @ColumnInfo(name = "sort_order")
-    val sortOrder: Double,
+    val sortOrder: Long,
 
     @SerialName("topic_id")
     @ColumnInfo(name = "topic_id")

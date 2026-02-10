@@ -9,6 +9,7 @@ import com.example.learning_test.ui.UiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
 
@@ -20,6 +21,8 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
     val state = _state.asStateFlow()
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing = _isSyncing.asStateFlow()
+
+    private var currentReadJob: Job? = null
 
     init {
         refresh()
@@ -34,8 +37,9 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
     }
 
     fun readTasks(topicId: Int) {
-        // We observe the DB flow for this topic
-        viewModelScope.launch {
+        currentReadJob?.cancel()
+        _state.value = UiState.Loading // <--- GHOST FIX
+        currentReadJob = viewModelScope.launch {
             repository.getTasksForTopic(topicId).collect { tasks ->
                 _state.value = UiState.Success(tasks)
             }
@@ -71,21 +75,40 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
         }
     }
 
-    fun reorderTasks(fromIndex: Int, toIndex: Int) {
-        val currentTasks = (_state.value as? UiState.Success)?.tasks ?: return
+    fun reorderTasks(topicId: Int, fromIndex: Int, toIndex: Int) {
+        val currentList = (_state.value as? UiState.Success)?.tasks?.toMutableList() ?: return
         if (fromIndex == toIndex) return
 
-        // Calculate new decimal rank
-        val prevRank = if (toIndex > 0) currentTasks[toIndex - 1].sortOrder else 0.0
-        val nextRank = if (toIndex < currentTasks.size - 1) currentTasks[toIndex + 1].sortOrder else prevRank + 200.0
+        // A. Simulate Move (Crash Fix)
+        if (fromIndex < currentList.size) {
+             val item = currentList.removeAt(fromIndex)
+             if (toIndex <= currentList.size) {
+                 currentList.add(toIndex, item)
+             } else {
+                 return // Out of bounds
+             }
 
-        // If moving to very top
-        val newRank = if (toIndex == 0) currentTasks[0].sortOrder / 2 else (prevRank + nextRank) / 2
+             // B. Calculate Neighbors
+             val prevRank = if (toIndex > 0) currentList[toIndex - 1].sortOrder else 0L
+             val nextRank = if (toIndex < currentList.size - 1) currentList[toIndex + 1].sortOrder else prevRank + 2000L
 
-        val taskToMove = currentTasks[fromIndex]
+             // C. Calculate New Rank (Integer Math)
+             val newRank = (prevRank + nextRank) / 2
 
-        viewModelScope.launch(Dispatchers.IO) {
-            repository.updateTaskOrder(taskToMove, newRank)
+             // D. Collision Check
+             if (newRank == prevRank || newRank == nextRank) {
+                 // GAP IS GONE! Rebalance everything.
+                 viewModelScope.launch(Dispatchers.IO) {
+                     repository.rebalanceTasks(topicId)
+                     // Usage: The UI flow will update automatically after rebalance
+                 }
+                 return
+             }
+
+             // E. Save Normal Move
+             viewModelScope.launch(Dispatchers.IO) {
+                 repository.updateTaskOrder(item, newRank)
+             }
         }
     }
 
@@ -96,17 +119,24 @@ class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
     }
 
     fun reorderTopics(fromIndex: Int, toIndex: Int) {
-        val currentTopics = topics.value
+        val currentTopics = topics.value.toMutableList()
         if (fromIndex == toIndex || currentTopics.isEmpty()) return
 
-        val prevRank = if (toIndex > 0) currentTopics[toIndex - 1].sortOrder else 0.0
-        val nextRank = if (toIndex < currentTopics.size - 1) currentTopics[toIndex + 1].sortOrder else prevRank + 200.0
-        val newRank = if (toIndex == 0) currentTopics[0].sortOrder / 2 else (prevRank + nextRank) / 2
+        if (fromIndex < currentTopics.size) {
+            val item = currentTopics.removeAt(fromIndex)
+            if (toIndex <= currentTopics.size) {
+                currentTopics.add(toIndex, item)
+            } else {
+                return
+            }
 
-        val topicToMove = currentTopics[fromIndex]
+            val prevRank = if (toIndex > 0) currentTopics[toIndex - 1].sortOrder else 0L
+            val nextRank = if (toIndex < currentTopics.size - 1) currentTopics[toIndex + 1].sortOrder else prevRank + 2000L
+            val newRank = (prevRank + nextRank) / 2
 
-        viewModelScope.launch(Dispatchers.IO) {
-            repository.updateTopicOrder(topicToMove, newRank)
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.updateTopicOrder(item, newRank)
+            }
         }
     }
 

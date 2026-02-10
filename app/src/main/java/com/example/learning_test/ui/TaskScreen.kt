@@ -264,7 +264,7 @@ fun TaskScreen(
             is UiState.Error -> Text("Error: ${currentState.message}", color = Color.Red)
             is UiState.Success -> {
                 val reorderableLazyListState = rememberReorderableLazyListState(listState) { from, to ->
-                    viewModel.reorderTasks(from.index, to.index)
+                    viewModel.reorderTasks(topic.id, from.index, to.index)
                 }
 
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
