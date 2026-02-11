@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.*
@@ -37,15 +37,13 @@ fun ArchivedTopicsScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+        contentWindowInsets = WindowInsets.safeDrawing
     ) { innerPadding ->
-        val systemInsets = WindowInsets.systemBars.asPaddingValues()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(top = systemInsets.calculateTopPadding())
                 .padding(horizontal = 16.dp)
         ) {
             // Header with back button and title
@@ -55,7 +53,7 @@ fun ArchivedTopicsScreen(
         ) {
             IconButton(onClick = onBackPressed) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = MaterialTheme.colorScheme.primary
                 )
@@ -83,9 +81,7 @@ fun ArchivedTopicsScreen(
             )
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(
-                    bottom = systemInsets.calculateBottomPadding() + 80.dp
-                )
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(archivedTopics, key = { it.id }) { topic ->
                     Card(
@@ -106,7 +102,7 @@ fun ArchivedTopicsScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    Icons.Default.ArrowForward,
+                                    Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = "Topic",
                                     tint = MaterialTheme.colorScheme.primary
                                 )
@@ -193,4 +189,3 @@ fun ArchivedTopicsScreen(
     }
 }
 }
-

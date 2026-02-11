@@ -107,16 +107,13 @@ fun TaskScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+        contentWindowInsets = WindowInsets.safeDrawing
     ) { innerPadding ->
-        val systemInsets = WindowInsets.systemBars.asPaddingValues()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(top = systemInsets.calculateTopPadding())
-                .imePadding()
                 .padding(horizontal = 16.dp)
         ) {
 
@@ -292,9 +289,7 @@ fun TaskScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        bottom = systemInsets.calculateBottomPadding() + 80.dp
-                    )
+                    contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     items(currentState.tasks, key = { it.id }) { task ->
                         ReorderableItem(reorderableLazyListState, key = task.id) { isDragging ->

@@ -1,6 +1,5 @@
 package com.example.learning_test
 
-import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -34,23 +33,24 @@ class MainActivity : ComponentActivity() {
         // 1. Force Edge-to-Edge
         enableEdgeToEdge()
 
-        // 2. BRUTE FORCE: Manually set the bar to transparent (Samsung Fix)
-        window.navigationBarColor = Color.TRANSPARENT
-        window.statusBarColor = Color.TRANSPARENT
+        // 2. SET SYSTEM BARS TO LIGHT GREY
+        val lightGrey = android.graphics.Color.parseColor("#E0E0E0")
 
-        // FORCE BACKGROUND: If the Scaffold slips, show BLACK to avoid white flashes
-        window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+        window.navigationBarColor = lightGrey
+        window.statusBarColor = lightGrey
 
-        // 3. FIX: Disable Contrast Enforcement (Prevents white bar on Samsung)
+        // FORCE BACKGROUND: Fixes the "White Strip" moving up behind keyboard
+        window.setBackgroundDrawable(ColorDrawable(lightGrey))
+
+        // 3. FIX: Disable Contrast Enforcement (Prevents system overrides)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
 
-        // 4. Ensure icons are visible (Black icons on transparent background)
-        // Adjust this if your app is dark mode by default
+        // 4. Ensure icons are visible (Dark icons on Light background)
         WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightNavigationBars = true
-            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true // true = dark icons for light background
+            isAppearanceLightStatusBars = true     // true = dark icons for light background
         }
 
         // 1. Initialize Database & Repository
@@ -66,7 +66,10 @@ class MainActivity : ComponentActivity() {
                 // Store selected topic for navigation
                 var selectedTopic by remember { mutableStateOf<TopicEntity?>(null) }
 
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
                     NavHost(
                         navController = navController,
                         startDestination = "topic_screen",

@@ -56,15 +56,13 @@ fun TopicSelectionScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+        contentWindowInsets = WindowInsets.safeDrawing
     ) { innerPadding ->
-        val systemInsets = WindowInsets.systemBars.asPaddingValues()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding) // Explicit usage to satisfy compiler
-                .padding(top = systemInsets.calculateTopPadding())
+                .padding(innerPadding)
                 .padding(horizontal = 16.dp)
         ) {
 
@@ -136,9 +134,7 @@ fun TopicSelectionScreen(
 
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(
-                    bottom = systemInsets.calculateBottomPadding() + 80.dp
-                )
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(topics, key = { it.id }) { topic ->
                     ReorderableItem(reorderableLazyListState, key = topic.id) { isDragging ->
