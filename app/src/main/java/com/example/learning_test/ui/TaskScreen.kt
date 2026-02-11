@@ -37,18 +37,22 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.learning_test.data.local.TaskEntity
 import com.example.learning_test.data.local.TopicEntity
 import com.example.learning_test.ui.theme.DarkRed
 import com.example.learning_test.viewmodel.TaskViewModel
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @Composable
 fun TaskScreen(
     viewModel: TaskViewModel,
     topic: TopicEntity,
     modifier: Modifier = Modifier,
-    onBackPressed: () -> Unit = {}
+    onBackPressed: () -> Unit = {},
+    onTopicRenamed: (String) -> Unit = {}
 ) {
     val uiState by viewModel.state.collectAsState()
     var newTaskText by remember { mutableStateOf("") }
