@@ -69,7 +69,9 @@ fun TopicSelectionScreen(
         // --- HEADER (Logo + Sync + Archive) ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp, bottom = 8.dp)
         ) {
             Icon(
                 Icons.Default.CheckCircle,
@@ -296,4 +298,3 @@ fun TopicSelectionScreen(
         )
     }
 }
-
