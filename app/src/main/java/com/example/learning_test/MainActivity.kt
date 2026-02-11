@@ -1,5 +1,7 @@
 package com.example.learning_test
 
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.core.view.WindowCompat
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -27,7 +30,28 @@ import com.example.learning_test.viewmodel.TaskViewModelFactory
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 1. Force Edge-to-Edge
         enableEdgeToEdge()
+
+        // 2. BRUTE FORCE: Manually set the bar to transparent (Samsung Fix)
+        window.navigationBarColor = Color.TRANSPARENT
+        window.statusBarColor = Color.TRANSPARENT
+
+        // FORCE BACKGROUND: If the Scaffold slips, show BLACK to avoid white flashes
+        window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+
+        // 3. FIX: Disable Contrast Enforcement (Prevents white bar on Samsung)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+
+        // 4. Ensure icons are visible (Black icons on transparent background)
+        // Adjust this if your app is dark mode by default
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightNavigationBars = true
+            isAppearanceLightStatusBars = true
+        }
 
         // 1. Initialize Database & Repository
         val database = AppDatabase.getDatabase(applicationContext)
@@ -46,7 +70,12 @@ class MainActivity : ComponentActivity() {
                     NavHost(
                         navController = navController,
                         startDestination = "topic_screen",
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier
+                            // We explicitly avoid applying innerPadding here because the individual screens
+                            // ("topic_screen", "task_screen") now manage their own Scaffolds and insets.
+                            // If we applied it here, we'd get double padding or the "white bar" issue.
+                            // We still use consumeWindowInsets to be correct with the system if we wanted,
+                            // but simply removing it allows the children to draw fully edge-to-edge.
                     ) {
                         // Topic Selection Screen
                         composable("topic_screen") {
@@ -105,4 +134,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-

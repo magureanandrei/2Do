@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
@@ -19,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.example.learning_test.data.local.TopicEntity
 import com.example.learning_test.ui.theme.DarkRed
@@ -49,7 +53,20 @@ fun TopicSelectionScreen(
         viewModel.refresh()
     }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { innerPadding ->
+        val systemInsets = WindowInsets.systemBars.asPaddingValues()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding) // Explicit usage to satisfy compiler
+                .padding(top = systemInsets.calculateTopPadding())
+                .padding(horizontal = 16.dp)
+        ) {
 
         // --- HEADER (Logo + Sync + Archive) ---
         Row(
@@ -117,7 +134,12 @@ fun TopicSelectionScreen(
                 viewModel.reorderTopics(from.index, to.index)
             }
 
-            LazyColumn(state = listState) {
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(
+                    bottom = systemInsets.calculateBottomPadding() + 80.dp
+                )
+            ) {
                 items(topics, key = { it.id }) { topic ->
                     ReorderableItem(reorderableLazyListState, key = topic.id) { isDragging ->
                         val elevation by animateDpAsState(if (isDragging) 8.dp else 2.dp, label = "elevation")
@@ -188,6 +210,7 @@ fun TopicSelectionScreen(
                 }
             }
         }
+        }
     }
 
     // --- DIALOGS ---
@@ -202,7 +225,23 @@ fun TopicSelectionScreen(
                     value = newTopicText,
                     onValueChange = { newTopicText = it },
                     label = { Text("Topic Name") },
-                    singleLine = true
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (newTopicText.isNotBlank()) {
+                                // Call ViewModel and Navigate when done
+                                viewModel.createTopic(newTopicText) { createdTopic ->
+                                    showCreateDialog = false
+                                    newTopicText = ""
+                                    onTopicSelected(createdTopic)
+                                }
+                            }
+                        }
+                    )
                 )
             },
             confirmButton = {

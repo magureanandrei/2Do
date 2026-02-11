@@ -34,13 +34,21 @@ fun ArchivedTopicsScreen(
     var topicToDelete by remember { mutableStateOf<TopicEntity?>(null) }
     val context = LocalContext.current
 
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { innerPadding ->
+        val systemInsets = WindowInsets.systemBars.asPaddingValues()
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Header with back button and title
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(top = systemInsets.calculateTopPadding())
+                .padding(horizontal = 16.dp)
+        ) {
+            // Header with back button and title
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(bottom = 16.dp)
@@ -74,7 +82,11 @@ fun ArchivedTopicsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            LazyColumn {
+            LazyColumn(
+                contentPadding = PaddingValues(
+                    bottom = systemInsets.calculateBottomPadding() + 80.dp
+                )
+            ) {
                 items(archivedTopics, key = { it.id }) { topic ->
                     Card(
                         modifier = Modifier
@@ -141,6 +153,7 @@ fun ArchivedTopicsScreen(
                     }
                 }
             }
+        }
         }
     }
 

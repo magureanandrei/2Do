@@ -32,7 +32,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -55,8 +58,8 @@ fun TaskScreen(
     var newTaskText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    // Track when we need to scroll to top after adding a task
-    var shouldScrollToTop by remember { mutableStateOf(false) }
+    // Track when we need to scroll to bottom after adding a task
+    var shouldScrollToBottom by remember { mutableStateOf(false) }
 
     // Delete confirmation dialog state
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -71,20 +74,20 @@ fun TaskScreen(
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
 
-    // Helper function to create task and flag scroll to top
-    fun createTaskAndScrollToTop() {
+    // Helper function to create task and flag scroll to bottom
+    fun createTaskAndScrollToBottom() {
         if (newTaskText.isNotBlank()) {
             viewModel.createTask(newTaskText, topic.id)
-            shouldScrollToTop = true
+            shouldScrollToBottom = true
             newTaskText = ""
         }
     }
 
-    // Scroll to top when task count changes and flag is set
+    // Scroll to bottom when task count changes and flag is set
     LaunchedEffect(taskCount) {
-        if (shouldScrollToTop) {
-            listState.animateScrollToItem(0)
-            shouldScrollToTop = false
+        if (shouldScrollToBottom && taskCount > 0) {
+            listState.animateScrollToItem(taskCount - 1)
+            shouldScrollToBottom = false
         }
     }
 
@@ -101,7 +104,21 @@ fun TaskScreen(
         viewModel.readTasks(topic.id)
     }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp).imePadding()) {
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { innerPadding ->
+        val systemInsets = WindowInsets.systemBars.asPaddingValues()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(top = systemInsets.calculateTopPadding())
+                .imePadding()
+                .padding(horizontal = 16.dp)
+        ) {
 
         // Back button and Topic Header
         Row(
@@ -245,13 +262,18 @@ fun TaskScreen(
                 label = { Text("New Task") },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                visualTransformation = VisualTransformation.None, // Ensures text is visible even with Password type
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    keyboardType = KeyboardType.Password, // Forces "No Extract UI" (hides white strip)
+                    imeAction = ImeAction.Done
+                ),
                 keyboardActions = KeyboardActions(
-                    onDone = { createTaskAndScrollToTop() }
+                    onDone = { createTaskAndScrollToBottom() }
                 )
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = { createTaskAndScrollToTop() }) {
+            Button(onClick = { createTaskAndScrollToBottom() }) {
                 Icon(Icons.Default.Add, contentDescription = "Add")
             }
         }
@@ -267,7 +289,13 @@ fun TaskScreen(
                     viewModel.reorderTasks(topic.id, from.index, to.index)
                 }
 
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        bottom = systemInsets.calculateBottomPadding() + 80.dp
+                    )
+                ) {
                     items(currentState.tasks, key = { it.id }) { task ->
                         ReorderableItem(reorderableLazyListState, key = task.id) { isDragging ->
                             val elevation by animateDpAsState(if (isDragging) 8.dp else 2.dp, label = "elevation")
@@ -286,6 +314,7 @@ fun TaskScreen(
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -428,4 +457,3 @@ fun TaskItem(
         )
     }
 }
-
