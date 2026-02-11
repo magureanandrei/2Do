@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.*
@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.learning_test.Models.Topic
+import com.example.learning_test.data.local.TopicEntity
 import com.example.learning_test.ui.theme.DarkRed
 import com.example.learning_test.viewmodel.TaskViewModel
 
@@ -26,32 +26,34 @@ import com.example.learning_test.viewmodel.TaskViewModel
 fun ArchivedTopicsScreen(
     viewModel: TaskViewModel,
     onBackPressed: () -> Unit,
-    onTopicSelected: (Topic) -> Unit,
+    onTopicSelected: (TopicEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val archivedTopics by viewModel.archivedTopics.collectAsState()
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
-    var topicToDelete by remember { mutableStateOf<Topic?>(null) }
+    var topicToDelete by remember { mutableStateOf<TopicEntity?>(null) }
     val context = LocalContext.current
 
-    // Refresh archived topics when screen is displayed
-    LaunchedEffect(Unit) {
-        viewModel.refreshArchivedTopics()
-    }
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing
+    ) { innerPadding ->
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Header with back button and title
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+        ) {
+            // Header with back button and title
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(bottom = 16.dp)
         ) {
             IconButton(onClick = onBackPressed) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = MaterialTheme.colorScheme.primary
                 )
@@ -78,8 +80,10 @@ fun ArchivedTopicsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            LazyColumn {
-                items(archivedTopics, key = { it.id ?: it.name }) { topic ->
+            LazyColumn(
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(archivedTopics, key = { it.id }) { topic ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -98,7 +102,7 @@ fun ArchivedTopicsScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    Icons.Default.ArrowForward,
+                                    Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = "Topic",
                                     tint = MaterialTheme.colorScheme.primary
                                 )
@@ -113,7 +117,7 @@ fun ArchivedTopicsScreen(
                                 IconButton(
                                     onClick = {
                                         Toast.makeText(context.applicationContext, "Topic restored", Toast.LENGTH_SHORT).show()
-                                        topic.id?.let { viewModel.unarchiveTopic(it) }
+                                        viewModel.unarchiveTopic(topic.id)
                                     },
                                     modifier = Modifier.size(32.dp)
                                 ) {
@@ -146,10 +150,12 @@ fun ArchivedTopicsScreen(
                 }
             }
         }
+        }
     }
 
     // Delete Confirmation Dialog
-    if (showDeleteConfirmDialog && topicToDelete != null) {
+    if (showDeleteConfirmDialog) {
+        topicToDelete?.let { topic ->
         AlertDialog(
             onDismissRequest = {
                 showDeleteConfirmDialog = false
@@ -157,12 +163,12 @@ fun ArchivedTopicsScreen(
             },
             title = { Text("Delete Topic?") },
             text = {
-                Text("Are you sure you want to delete \"${topicToDelete?.name}\" and all its tasks? This action cannot be undone.")
+                    Text("Are you sure you want to delete \"${topic.name}\" and all its tasks? This action cannot be undone.")
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        topicToDelete?.id?.let { viewModel.deleteTopic(it) }
+                            viewModel.deleteTopic(topic.id)
                         showDeleteConfirmDialog = false
                         topicToDelete = null
                     },
@@ -182,4 +188,4 @@ fun ArchivedTopicsScreen(
         )
     }
 }
-
+}

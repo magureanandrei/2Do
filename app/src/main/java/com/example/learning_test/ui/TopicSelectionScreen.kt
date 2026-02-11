@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
@@ -19,8 +21,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
-import com.example.learning_test.Models.Topic
+import com.example.learning_test.data.local.TopicEntity
 import com.example.learning_test.ui.theme.DarkRed
 import com.example.learning_test.viewmodel.TaskViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -29,58 +33,77 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 @Composable
 fun TopicSelectionScreen(
     viewModel: TaskViewModel,
-    onTopicSelected: (Topic) -> Unit,
+    onTopicSelected: (TopicEntity) -> Unit,
     onArchiveClicked: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val topics by viewModel.topics.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
+
     var newTopicText by remember { mutableStateOf("") }
     var showCreateDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
-    var topicToDelete by remember { mutableStateOf<Topic?>(null) }
+    var topicToDelete by remember { mutableStateOf<TopicEntity?>(null) }
+
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
-    // Refresh topics when screen is displayed
+    // Refresh data when screen opens
     LaunchedEffect(Unit) {
-        viewModel.refreshTopics()
+        viewModel.refresh()
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // App Title with Logo and Archive button
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing
+    ) { innerPadding ->
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+        ) {
+
+        // --- HEADER (Logo + Sync + Archive) ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp)
+                .padding(top = 14.dp, bottom = 8.dp)
         ) {
             Icon(
                 Icons.Default.CheckCircle,
-                contentDescription = "App Logo",
+                contentDescription = "Logo",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(32.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
+
             Text(
                 text = "2Do",
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.weight(1f)
+                style = MaterialTheme.typography.headlineMedium
             )
-            // Archive button
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Sync Indicator
+            SyncStatusIcon(isSyncing = isSyncing)
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Archive Button
             IconButton(onClick = onArchiveClicked) {
                 Icon(
                     Icons.Default.Archive,
-                    contentDescription = "View Archived Topics",
+                    contentDescription = "Archived",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
         }
 
-        // Button to create new topic
+        // --- CREATE BUTTON ---
         Button(
             onClick = { showCreateDialog = true },
             modifier = Modifier.fillMaxWidth()
@@ -92,40 +115,41 @@ fun TopicSelectionScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // List of existing topics
+        // --- TOPIC LIST ---
         if (topics.isEmpty()) {
-            Text(
-                text = "No topics yet. Create one to get started!",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "No topics yet. Create one to get started!",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         } else {
             val reorderableLazyListState = rememberReorderableLazyListState(listState) { from, to ->
                 viewModel.reorderTopics(from.index, to.index)
             }
 
-            LazyColumn(state = listState) {
-                items(topics, key = { it.id ?: it.name }) { topic ->
-                    ReorderableItem(reorderableLazyListState, key = topic.id ?: topic.name) { isDragging ->
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(topics, key = { it.id }) { topic ->
+                    ReorderableItem(reorderableLazyListState, key = topic.id) { isDragging ->
                         val elevation by animateDpAsState(if (isDragging) 8.dp else 2.dp, label = "elevation")
+
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
-                                .clickable { onTopicSelected(topic) },
+                                .clickable { onTopicSelected(topic) }, // Normal click opens topic
                             elevation = CardDefaults.cardElevation(defaultElevation = elevation)
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                            ) {
-                                // Top row: Drag handle, topic name, action icons
+                            Column(modifier = Modifier.padding(16.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Drag handle
+                                    // Drag Handle
                                     Icon(
                                         imageVector = Icons.Default.Menu,
                                         contentDescription = "Drag to reorder",
@@ -133,17 +157,19 @@ fun TopicSelectionScreen(
                                         tint = Color.Gray
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
+
+                                    // Topic Name
                                     Text(
                                         text = topic.name,
                                         style = MaterialTheme.typography.titleMedium,
                                         modifier = Modifier.weight(1f)
                                     )
 
-                                    // Archive Topic icon (box with arrow)
+                                    // Archive Action
                                     IconButton(
                                         onClick = {
-                                            Toast.makeText(context.applicationContext, "Topic archived", Toast.LENGTH_SHORT).show()
-                                            topic.id?.let { viewModel.archiveTopic(it) }
+                                            Toast.makeText(context, "Topic archived", Toast.LENGTH_SHORT).show()
+                                            viewModel.archiveTopic(topic.id)
                                         },
                                         modifier = Modifier.size(32.dp)
                                     ) {
@@ -155,7 +181,7 @@ fun TopicSelectionScreen(
                                         )
                                     }
 
-                                    // Delete All Tasks icon
+                                    // Delete Action
                                     IconButton(
                                         onClick = {
                                             topicToDelete = topic
@@ -165,7 +191,7 @@ fun TopicSelectionScreen(
                                     ) {
                                         Icon(
                                             Icons.Default.Delete,
-                                            contentDescription = "Delete All Tasks",
+                                            contentDescription = "Delete",
                                             tint = DarkRed,
                                             modifier = Modifier.size(20.dp)
                                         )
@@ -177,7 +203,10 @@ fun TopicSelectionScreen(
                 }
             }
         }
+        }
     }
+
+    // --- DIALOGS ---
 
     // Create New Topic Dialog
     if (showCreateDialog) {
@@ -189,18 +218,35 @@ fun TopicSelectionScreen(
                     value = newTopicText,
                     onValueChange = { newTopicText = it },
                     label = { Text("Topic Name") },
-                    singleLine = true
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (newTopicText.isNotBlank()) {
+                                // Call ViewModel and Navigate when done
+                                viewModel.createTopic(newTopicText) { createdTopic ->
+                                    showCreateDialog = false
+                                    newTopicText = ""
+                                    onTopicSelected(createdTopic)
+                                }
+                            }
+                        }
+                    )
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (newTopicText.isNotBlank()) {
+                            // Call ViewModel and Navigate when done
                             viewModel.createTopic(newTopicText) { createdTopic ->
-                                onTopicSelected(createdTopic)
+                                showCreateDialog = false
+                                newTopicText = ""
+                                onTopicSelected(createdTopic) // <--- NAVIGATION HAPPENS HERE
                             }
-                            newTopicText = ""
-                            showCreateDialog = false
                         }
                     }
                 ) {
@@ -227,12 +273,12 @@ fun TopicSelectionScreen(
             },
             title = { Text("Delete Topic?") },
             text = {
-                Text("Are you sure you want to delete \"${topicToDelete?.name}\" and all its tasks? This action cannot be undone.")
+                Text("Are you sure you want to delete \"${topicToDelete?.name}\" and all its tasks?")
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        topicToDelete?.id?.let { viewModel.deleteTopic(it) }
+                        topicToDelete?.let { viewModel.deleteTopic(it.id) {} }
                         showDeleteConfirmDialog = false
                         topicToDelete = null
                     },
@@ -252,4 +298,3 @@ fun TopicSelectionScreen(
         )
     }
 }
-

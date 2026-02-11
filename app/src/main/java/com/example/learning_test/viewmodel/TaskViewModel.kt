@@ -2,340 +2,200 @@ package com.example.learning_test.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.learning_test.Models.Task
-import com.example.learning_test.Models.Topic
-import com.example.learning_test.SupabaseClient
+import com.example.learning_test.data.TaskRepository
+import com.example.learning_test.data.local.TaskEntity
+import com.example.learning_test.data.local.TopicEntity
 import com.example.learning_test.ui.UiState
-import io.github.jan.supabase.postgrest.from
-import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-class TaskViewModel : ViewModel() {
+class TaskViewModel(private val repository: TaskRepository) : ViewModel() {
 
-    private val client = SupabaseClient.client
+    // --- TOPICS STATE ---
+    // We changed this from a simple val to a MutableStateFlow so we can update it optimistically
+    private val _topics = MutableStateFlow<List<TopicEntity>>(emptyList())
+    val topics = _topics.asStateFlow()
 
+    // --- TASKS STATE ---
     private val _state = MutableStateFlow<UiState>(UiState.Loading)
     val state = _state.asStateFlow()
 
-    private val _topics = MutableStateFlow<List<Topic>>(emptyList())
-    val topics = _topics.asStateFlow()
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing = _isSyncing.asStateFlow()
 
-    private val _archivedTopics = MutableStateFlow<List<Topic>>(emptyList())
-    val archivedTopics = _archivedTopics.asStateFlow()
+    val archivedTopics = repository.archivedTopics.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // --- JOBS & FLAGS ---
+    private var currentReadJob: Job? = null
+    private var reorderJob: Job? = null
+    private var topicReorderJob: Job? = null
+
+    // THE FIX: Flags to ignore DB updates while dragging
+    private var isDraggingTasks = false
+    private var isDraggingTopics = false
 
     init {
-        refreshTopics()
+        refresh()
+        // Start listening to topics immediately
+        observeTopics()
     }
 
-    // --- REFRESH TOPICS ---
-    fun refreshTopics() {
+    fun refresh() {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val topicsList = client.from("topics")
-                    .select {
-                        filter { eq("is_archived", false) }
-                        order("sort_order", order = Order.ASCENDING)
-                    }
-                    .decodeList<Topic>()
-
-                _topics.value = topicsList
-            } catch (e: Exception) {
-                println("Error fetching topics: ${e.message}")
-                _topics.value = emptyList()
-            }
+            _isSyncing.value = true
+            repository.pullFromSupabase()
+            _isSyncing.value = false
         }
     }
 
-    // --- REFRESH ARCHIVED TOPICS ---
-    fun refreshArchivedTopics() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val topicsList = client.from("topics")
-                    .select {
-                        filter { eq("is_archived", true) }
-                        order("sort_order", order = Order.ASCENDING)
-                    }
-                    .decodeList<Topic>()
-
-                _archivedTopics.value = topicsList
-            } catch (e: Exception) {
-                println("Error fetching archived topics: ${e.message}")
-                _archivedTopics.value = emptyList()
-            }
-        }
-    }
-
-    // --- CREATE TOPIC ---
-    fun createTopic(name: String, onSuccess: (Topic) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // Shift all existing topics down by incrementing their sort_order
-                _topics.value.forEach { topic ->
-                    topic.id?.let { id ->
-                        client.from("topics").update(
-                            { set("sort_order", topic.sortOrder + 1) }
-                        ) {
-                            filter { eq("id", id) }
-                        }
-                    }
+    // --- TOPIC OBSERVATION ---
+    private fun observeTopics() {
+        viewModelScope.launch {
+            repository.topics.collect { dbTopics ->
+                // BLOCKER: If dragging, ignore the DB.
+                // We trust the UI state more than the DB right now.
+                if (!isDraggingTopics) {
+                    _topics.value = dbTopics
                 }
-
-                // Insert new topic at top with sort_order = 0
-                val newTopic = Topic(name = name, sortOrder = 0)
-
-                val insertedTopic = client.from("topics")
-                    .insert(newTopic) { select() }
-                    .decodeSingle<Topic>()
-
-                refreshTopics()
-                launch(Dispatchers.Main) {
-                    onSuccess(insertedTopic)
-                }
-            } catch (e: Exception) {
-                println("Error creating topic: ${e.message}")
             }
         }
     }
 
-    // --- READ TASKS ---
+    // --- READ TASKS (With Jitter Blocker) ---
     fun readTasks(topicId: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _state.value = UiState.Loading
-            try {
-                val tasks = client.from("tasks")
-                    .select {
-                        filter { eq("topic_id", topicId) }
-                        order("sort_order", order = Order.ASCENDING)
-                    }
-                    .decodeList<Task>()
-
-                _state.value = UiState.Success(tasks)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                _state.value = UiState.Error(e.message ?: "Error loading tasks")
+        currentReadJob?.cancel()
+        _state.value = UiState.Loading
+        currentReadJob = viewModelScope.launch {
+            repository.getTasksForTopic(topicId).collect { tasks ->
+                // BLOCKER: If dragging, ignore the DB.
+                if (!isDraggingTasks) {
+                    _state.value = UiState.Success(tasks)
+                }
             }
         }
     }
 
-    // --- CREATE TASK ---
+    // --- REORDER TASKS (Optimistic + Debounce) ---
+    fun reorderTasks(topicId: Int, fromIndex: Int, toIndex: Int) {
+        val currentList = (_state.value as? UiState.Success)?.tasks?.toMutableList() ?: return
+        if (fromIndex == toIndex) return
+
+        // 1. SET FLAG: "I am dragging, don't listen to Room!"
+        isDraggingTasks = true
+
+        // 2. VISUAL UPDATE
+        if (fromIndex < currentList.size && toIndex <= currentList.size) {
+            val item = currentList.removeAt(fromIndex)
+            currentList.add(toIndex, item)
+            _state.value = UiState.Success(currentList)
+        }
+
+        // 3. DEBOUNCED SAVE
+        reorderJob?.cancel()
+        reorderJob = viewModelScope.launch(Dispatchers.IO) {
+            // Wait for silence (User stopped moving)
+            delay(500)
+
+            // Calculate Math
+            val prevRank = if (toIndex > 0) currentList[toIndex - 1].sortOrder else 0L
+            val nextRank = if (toIndex < currentList.size - 1) currentList[toIndex + 1].sortOrder else prevRank + 2000L
+            val newRank = (prevRank + nextRank) / 2
+
+            // Save
+            val item = currentList[toIndex] // Get the item at the new position
+            if (newRank == prevRank || newRank == nextRank) {
+                repository.rebalanceTasks(topicId)
+            } else {
+                repository.updateTaskOrder(item.copy(sortOrder = newRank), newRank)
+            }
+
+            // 4. RESET FLAG: "Okay, I'm done. Room can speak now."
+            // We wait a tiny bit to ensure the DB write triggers the flow update
+            delay(100)
+            isDraggingTasks = false
+        }
+    }
+
+    // --- REORDER TOPICS (Optimistic + Debounce) ---
+    fun reorderTopics(fromIndex: Int, toIndex: Int) {
+        val currentList = _topics.value.toMutableList()
+        if (fromIndex == toIndex || currentList.isEmpty()) return
+
+        // 1. SET FLAG
+        isDraggingTopics = true
+
+        // 2. VISUAL UPDATE
+        if (fromIndex < currentList.size && toIndex <= currentList.size) {
+            val item = currentList.removeAt(fromIndex)
+            currentList.add(toIndex, item)
+            _topics.value = currentList // Update the MutableStateFlow!
+        }
+
+        // 3. DEBOUNCED SAVE
+        topicReorderJob?.cancel()
+        topicReorderJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(500)
+
+            val prevRank = if (toIndex > 0) currentList[toIndex - 1].sortOrder else 0L
+            val nextRank = if (toIndex < currentList.size - 1) currentList[toIndex + 1].sortOrder else prevRank + 2000L
+            val newRank = (prevRank + nextRank) / 2
+
+            val item = currentList[toIndex]
+            repository.updateTopicOrder(item, newRank) // Ensure Repo has this function!
+
+            // 4. RESET FLAG
+            delay(100)
+            isDraggingTopics = false
+        }
+    }
+
+    // --- OTHER FUNCTIONS (Unchanged) ---
+    fun createTopic(name: String, onSuccess: (TopicEntity) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val newTopic = repository.createTopic(name)
+            launch(Dispatchers.Main) { onSuccess(newTopic) }
+        }
+    }
+
     fun createTask(content: String, topicId: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // Shift all existing tasks in this topic down by incrementing their sort_order
-                val currentTasks = (_state.value as? UiState.Success)?.tasks ?: emptyList()
-                currentTasks.forEach { task ->
-                    task.id?.let { id ->
-                        client.from("tasks").update(
-                            { set("sort_order", task.sortOrder + 1) }
-                        ) {
-                            filter { eq("id", id) }
-                        }
-                    }
-                }
+        viewModelScope.launch(Dispatchers.IO) { repository.createTask(content, topicId) }
+    }
 
-                // Insert new task at top with sort_order = 0
-                val newTask = Task(content = content, topicId = topicId, sortOrder = 0)
-                client.from("tasks").insert(newTask)
-                readTasks(topicId)
-            } catch (e: Exception) {
-                println("Error creating: ${e.message}")
-            }
+    fun updateTask(task: TaskEntity) {
+        viewModelScope.launch(Dispatchers.IO) { repository.updateTaskStatus(task) }
+    }
+
+    fun updateTaskContent(taskId: Int, newContent: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentTasks = (_state.value as? UiState.Success)?.tasks ?: return@launch
+            val task = currentTasks.find { it.id == taskId } ?: return@launch
+            repository.updateTaskContent(task, newContent)
         }
     }
 
-    // --- UPDATE (Toggle Checkbox) ---
-    fun updateTask(task: Task) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                client.from("tasks").update(
-                    { set("is_complete", !task.isComplete) }
-                ) {
-                    filter { eq("id", task.id!!) }
-                }
-                readTasks(task.topicId)
-            } catch (e: Exception) {
-                println("Error updating: ${e.message}")
-            }
-        }
+    fun deleteTask(task: TaskEntity) {
+        viewModelScope.launch(Dispatchers.IO) { repository.deleteTask(task.id) }
     }
 
-    // --- UPDATE (Edit Content) ---
-    fun updateTaskContent(id: Int, newContent: String, topicId: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                client.from("tasks").update(
-                    { set("content", newContent) }
-                ) {
-                    filter { eq("id", id) }
-                }
-                readTasks(topicId)
-            } catch (e: Exception) {
-                println("Error updating content: ${e.message}")
-            }
-        }
+    fun archiveTopic(topicId: Int) {
+        viewModelScope.launch(Dispatchers.IO) { repository.archiveTopic(topicId) }
     }
 
-    // --- DELETE TASK ---
-    fun deleteTask(id: Int, topicId: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                client.from("tasks").delete {
-                    filter { eq("id", id) }
-                }
-                readTasks(topicId)
-            } catch (e: Exception) {
-                println("Error deleting: ${e.message}")
-            }
-        }
+    fun unarchiveTopic(topicId: Int) {
+        viewModelScope.launch(Dispatchers.IO) { repository.unarchiveTopic(topicId) }
     }
 
-    // --- DELETE ALL TASKS IN TOPIC ---
-    fun deleteAllTasksInTopic(topicId: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                client.from("tasks").delete {
-                    filter { eq("topic_id", topicId) }
-                }
-                readTasks(topicId)
-            } catch (e: Exception) {
-                println("Error deleting all tasks: ${e.message}")
-            }
-        }
-    }
-
-    // --- DELETE TOPIC (with all its tasks) ---
     fun deleteTopic(topicId: Int, onSuccess: () -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // First delete all tasks in the topic
-                client.from("tasks").delete {
-                    filter { eq("topic_id", topicId) }
-                }
-                // Then delete the topic itself
-                client.from("topics").delete {
-                    filter { eq("id", topicId) }
-                }
-                refreshTopics()
-                refreshArchivedTopics()
-                launch(Dispatchers.Main) {
-                    onSuccess()
-                }
-            } catch (e: Exception) {
-                println("Error deleting topic: ${e.message}")
-            }
+            repository.deleteTopic(topicId)
+            launch(Dispatchers.Main) { onSuccess() }
         }
     }
 
-    // --- RENAME TOPIC ---
-    fun renameTopic(topicId: Int, newName: String, onSuccess: (String) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                client.from("topics").update(
-                    { set("name", newName) }
-                ) {
-                    filter { eq("id", topicId) }
-                }
-                refreshTopics()
-                launch(Dispatchers.Main) {
-                    onSuccess(newName)
-                }
-            } catch (e: Exception) {
-                println("Error renaming topic: ${e.message}")
-            }
-        }
-    }
-
-    // --- ARCHIVE TOPIC ---
-    fun archiveTopic(topicId: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                client.from("topics").update(
-                    { set("is_archived", true) }
-                ) {
-                    filter { eq("id", topicId) }
-                }
-                refreshTopics()
-                refreshArchivedTopics()
-            } catch (e: Exception) {
-                println("Error archiving topic: ${e.message}")
-            }
-        }
-    }
-
-    // --- UNARCHIVE TOPIC ---
-    fun unarchiveTopic(topicId: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                client.from("topics").update(
-                    { set("is_archived", false) }
-                ) {
-                    filter { eq("id", topicId) }
-                }
-                refreshTopics()
-                refreshArchivedTopics()
-            } catch (e: Exception) {
-                println("Error unarchiving topic: ${e.message}")
-            }
-        }
-    }
-
-    // --- REORDER TASKS ---
-    fun reorderTasks(topicId: Int, fromIndex: Int, toIndex: Int) {
-        val currentTasks = (_state.value as? UiState.Success)?.tasks?.toMutableList() ?: return
-        if (fromIndex == toIndex) return
-
-        // Reorder the local list immediately for responsive UI
-        val item = currentTasks.removeAt(fromIndex)
-        currentTasks.add(toIndex, item)
-        _state.value = UiState.Success(currentTasks)
-
-        // Persist new order to database
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                currentTasks.forEachIndexed { index, task ->
-                    task.id?.let { id ->
-                        client.from("tasks").update(
-                            { set("sort_order", index) }
-                        ) {
-                            filter { eq("id", id) }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                println("Error persisting task order: ${e.message}")
-            }
-        }
-    }
-
-    // --- REORDER TOPICS ---
-    fun reorderTopics(fromIndex: Int, toIndex: Int) {
-        val currentTopics = _topics.value.toMutableList()
-        if (fromIndex == toIndex) return
-
-        // Reorder the local list immediately for responsive UI
-        val item = currentTopics.removeAt(fromIndex)
-        currentTopics.add(toIndex, item)
-        _topics.value = currentTopics
-
-        // Persist new order to database
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                currentTopics.forEachIndexed { index, topic ->
-                    topic.id?.let { id ->
-                        client.from("topics").update(
-                            { set("sort_order", index) }
-                        ) {
-                            filter { eq("id", id) }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                println("Error persisting topic order: ${e.message}")
-            }
-        }
+    fun updateTopicName(topicId: Int, newName: String) {
+        viewModelScope.launch(Dispatchers.IO) { repository.updateTopicName(topicId, newName) }
     }
 }
-
