@@ -106,10 +106,10 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // Task Screen with topic id parameter
+                        // Task Screen with topic parameter
                         composable(
-                            route = "task_screen/{topicId}",
-                            arguments = listOf(navArgument("topicId") { type = NavType.IntType })
+                            route = "task_screen/{topic}",
+                            arguments = listOf(navArgument("topic") { type = NavType.StringType })
                         ) { backStackEntry ->
                             val topicId = backStackEntry.arguments?.getInt("topicId") ?: 0
                             // Use the stored topic or find it from viewModel (check both regular and archived)
