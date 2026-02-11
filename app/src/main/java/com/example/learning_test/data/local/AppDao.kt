@@ -9,7 +9,7 @@ interface AppDao {
     @Query("SELECT * FROM topics WHERE is_archived = 0 ORDER BY sort_order ASC")
     fun getAllTopics(): Flow<List<TopicEntity>> // Flow updates UI automatically!
 
-    @Query("SELECT * FROM topics WHERE is_archived = 1 ORDER BY sort_order ASC")
+    @Query("SELECT * FROM topics WHERE is_archived = 1 ORDER BY archived_at DESC")
     fun getArchivedTopics(): Flow<List<TopicEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -69,6 +69,6 @@ interface AppDao {
     @Query("SELECT MAX(sort_order) FROM topics")
     suspend fun getMaxTopicSortOrder(): Long?
 
-    @Query("SELECT MIN(sort_order) FROM topics")
+    @Query("SELECT MIN(sort_order) FROM topics WHERE is_archived = 0")
     suspend fun getMinTopicSortOrder(): Long?
 }

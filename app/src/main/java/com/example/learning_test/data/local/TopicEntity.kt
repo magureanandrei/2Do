@@ -22,6 +22,10 @@ data class TopicEntity(
     @ColumnInfo(name = "is_archived")
     val isArchived: Boolean,
 
+    @SerialName("archived_at")
+    @ColumnInfo(name = "archived_at")
+    val archivedAt: Long? = null,
+
     // These fields don't exist in Supabase JSON, so we default them to null/true
     @ColumnInfo(name = "supabase_id")
     val supabaseId: Int? = null,

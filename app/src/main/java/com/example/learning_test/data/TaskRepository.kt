@@ -41,6 +41,7 @@ class TaskRepository(private val dao: AppDao) {
                         name = dto.name,
                         sortOrder = dto.sortOrder,
                         isArchived = dto.isArchived,
+                        archivedAt = dto.archivedAt,
                         isSynced = true
                     ))
                 } else {
@@ -49,6 +50,7 @@ class TaskRepository(private val dao: AppDao) {
                         name = dto.name,
                         sortOrder = dto.sortOrder,
                         isArchived = dto.isArchived,
+                        archivedAt = dto.archivedAt,
                         supabaseId = dto.id,
                         isSynced = true
                     )
@@ -96,7 +98,7 @@ class TaskRepository(private val dao: AppDao) {
         val newRank = minRank - 1000
 
         // 1. Save Local
-        val newEntity = TopicEntity(name = name, sortOrder = newRank, isArchived = false, isSynced = false)
+        val newEntity = TopicEntity(name = name, sortOrder = newRank, isArchived = false, archivedAt = null, isSynced = false)
         val localId = dao.insertTopic(newEntity).toInt()
         val createdEntity = newEntity.copy(id = localId)
 
@@ -106,7 +108,8 @@ class TaskRepository(private val dao: AppDao) {
                 id = null,
                 name = createdEntity.name,
                 sortOrder = createdEntity.sortOrder,
-                isArchived = createdEntity.isArchived
+                isArchived = createdEntity.isArchived,
+                archivedAt = createdEntity.archivedAt
             )
 
             val remoteDto = client.from("topics")
@@ -310,13 +313,16 @@ class TaskRepository(private val dao: AppDao) {
     // --- ARCHIVE TOPIC ---
     suspend fun archiveTopic(topicId: Int) {
         val topic = dao.getTopicById(topicId) ?: return
-        val updatedTopic = topic.copy(isArchived = true, isSynced = false)
+        val updatedTopic = topic.copy(isArchived = true, archivedAt = System.currentTimeMillis(), isSynced = false)
         dao.updateTopic(updatedTopic)
 
         val supabaseId = topic.supabaseId
         if (supabaseId != null) {
             try {
-                client.from("topics").update({ set("is_archived", true) }) { filter { eq("id", supabaseId) } }
+                client.from("topics").update({
+                    set("is_archived", true)
+                    set("archived_at", updatedTopic.archivedAt)
+                }) { filter { eq("id", supabaseId) } }
                 dao.updateTopic(updatedTopic.copy(isSynced = true))
             } catch (e: Exception) { println("Archive failed: ${e.message}") }
         }
@@ -324,13 +330,27 @@ class TaskRepository(private val dao: AppDao) {
 
     suspend fun unarchiveTopic(topicId: Int) {
         val topic = dao.getTopicById(topicId) ?: return
-        val updatedTopic = topic.copy(isArchived = false, isSynced = false)
+
+        // Find top rank to jump to
+        val minRank = dao.getMinTopicSortOrder() ?: 0L
+        val newRank = minRank - 1000
+
+        val updatedTopic = topic.copy(
+            isArchived = false,
+            archivedAt = null,
+            sortOrder = newRank,
+            isSynced = false
+        )
         dao.updateTopic(updatedTopic)
 
         val supabaseId = topic.supabaseId
         if (supabaseId != null) {
             try {
-                client.from("topics").update({ set("is_archived", false) }) { filter { eq("id", supabaseId) } }
+                client.from("topics").update({
+                    set("is_archived", false)
+                    set("archived_at", null as Long?)
+                    set("sort_order", newRank)
+                }) { filter { eq("id", supabaseId) } }
                 dao.updateTopic(updatedTopic.copy(isSynced = true))
             } catch (e: Exception) { println("Unarchive failed: ${e.message}") }
         }
@@ -344,7 +364,8 @@ data class TopicNetwork(
     val id: Int? = null,
     val name: String,
     @SerialName("sort_order") val sortOrder: Long,
-    @SerialName("is_archived") val isArchived: Boolean
+    @SerialName("is_archived") val isArchived: Boolean,
+    @SerialName("archived_at") val archivedAt: Long? = null
 )
 
 @Serializable
