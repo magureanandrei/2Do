@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -17,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
@@ -117,27 +117,20 @@ fun TaskScreen(
                 .padding(horizontal = 16.dp)
         ) {
 
-        // Back button and Topic Header
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth()
-        ) {
-            IconButton(onClick = onBackPressed) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Container with dynamic height for topic name
-            Box(
+            // Header with Back button and Topic Title
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .wrapContentHeight(),
-                contentAlignment = Alignment.CenterStart
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                IconButton(onClick = onBackPressed) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back"
+                    )
+                }
+
                 if (isEditingTopicName) {
                     // Inline edit mode (Trello-style) with border
                     Box(
@@ -192,155 +185,170 @@ fun TaskScreen(
                             }
                     )
                 }
-            }
-        }
 
-        // Action buttons row
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.Start
-        ) {
-            // Archive Topic button - only show for non-archived topics
-            if (!topic.isArchived) {
-                Button(
-                    onClick = {
-                        Toast.makeText(context.applicationContext, "Topic archived", Toast.LENGTH_SHORT).show()
-                        viewModel.archiveTopic(topic.id)
-                        onBackPressed()
-                    },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.height(28.dp)
-                ) {
-                    Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Archive Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                if (isEditingTopicName) {
+                    IconButton(onClick = {
+                        isEditingTopicName = false
+                        if (editedTopicName.text.isNotBlank() && editedTopicName.text != topic.name) {
+                            onTopicRenamed(editedTopicName.text)
+                            viewModel.updateTopicName(topic.id, editedTopicName.text)
+                        }
+                    }) {
+                        Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Save Name")
+                    }
+                } else {
+                    IconButton(onClick = { isEditingTopicName = true }) {
+                        Icon(imageVector = Icons.Default.Edit, contentDescription = "Rename Topic")
+                    }
                 }
-
-                Spacer(modifier = Modifier.width(8.dp))
             }
 
-            // Restore Topic button - only show for archived topics
-            if (topic.isArchived) {
-                Button(
-                    onClick = {
-                        Toast.makeText(context.applicationContext, "Topic restored", Toast.LENGTH_SHORT).show()
-                        viewModel.unarchiveTopic(topic.id)
-                        onBackPressed()
-                    },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.height(28.dp)
-                ) {
-                    Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Restore Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-
-            // Delete Topic button
-            Button(
-                onClick = { showDeleteConfirmDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = DarkRed),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                modifier = Modifier.height(28.dp)
+            // Action buttons row
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.Start
             ) {
-                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Delete Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
-            }
-        }
+                // Archive Topic button - only show for non-archived topics
+                if (!topic.isArchived) {
+                    Button(
+                        onClick = {
+                            Toast.makeText(context.applicationContext, "Topic archived", Toast.LENGTH_SHORT).show()
+                            viewModel.archiveTopic(topic.id)
+                            onBackPressed()
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Archive Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    }
 
-        // --- INPUT ROW (CREATE) ---
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = newTaskText,
-                onValueChange = { newTaskText = it },
-                label = { Text("New Task") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                visualTransformation = VisualTransformation.None, // Ensures text is visible even with Password type
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    keyboardType = KeyboardType.Password, // Forces "No Extract UI" (hides white strip)
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = { createTaskAndScrollToBottom() }
-                )
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = { createTaskAndScrollToBottom() }) {
-                Icon(Icons.Default.Add, contentDescription = "Add")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- LIST AREA (READ) ---
-        when (val currentState = uiState) {
-            is UiState.Loading -> CircularProgressIndicator()
-            is UiState.Error -> Text("Error: ${currentState.message}", color = Color.Red)
-            is UiState.Success -> {
-                val reorderableLazyListState = rememberReorderableLazyListState(listState) { from, to ->
-                    viewModel.reorderTasks(topic.id, from.index, to.index)
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
 
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 16.dp)
+                // Restore Topic button - only show for archived topics
+                if (topic.isArchived) {
+                    Button(
+                        onClick = {
+                            Toast.makeText(context.applicationContext, "Topic restored", Toast.LENGTH_SHORT).show()
+                            viewModel.unarchiveTopic(topic.id)
+                            onBackPressed()
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Restore Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
+                // Delete Topic button
+                Button(
+                    onClick = { showDeleteConfirmDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkRed),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.height(28.dp)
                 ) {
-                    items(currentState.tasks, key = { it.id }) { task ->
-                        ReorderableItem(reorderableLazyListState, key = task.id) { isDragging ->
-                            val elevation by animateDpAsState(if (isDragging) 8.dp else 2.dp, label = "elevation")
-                            TaskItem(
-                                task = task,
-                                onToggle = { viewModel.updateTask(task) },
-                                onEdit = { newContent ->
-                                    viewModel.updateTaskContent(task.id, newContent)
-                                },
-                                onDelete = {
-                                    viewModel.deleteTask(task)
-                                },
-                                elevation = elevation,
-                                dragModifier = Modifier.draggableHandle()
-                            )
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Delete Topic", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                }
+            }
+
+            // --- INPUT ROW (CREATE) ---
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = newTaskText,
+                    onValueChange = { newTaskText = it },
+                    label = { Text("New Task") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    visualTransformation = VisualTransformation.None, // Ensures text is visible even with Password type
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        keyboardType = KeyboardType.Password, // Forces "No Extract UI" (hides white strip)
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = { createTaskAndScrollToBottom() }
+                    )
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(onClick = { createTaskAndScrollToBottom() }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- LIST AREA (READ) ---
+            when (val currentState = uiState) {
+                is UiState.Loading -> CircularProgressIndicator()
+                is UiState.Error -> Text("Error: ${currentState.message}", color = Color.Red)
+                is UiState.Success -> {
+                    val reorderableLazyListState = rememberReorderableLazyListState(listState) { from, to ->
+                        viewModel.reorderTasks(topic.id, from.index, to.index)
+                    }
+
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 16.dp)
+                    ) {
+                        items(currentState.tasks, key = { it.id }) { task ->
+                            ReorderableItem(reorderableLazyListState, key = task.id) { isDragging ->
+                                val elevation by animateDpAsState(if (isDragging) 8.dp else 2.dp, label = "elevation")
+                                TaskItem(
+                                    task = task,
+                                    onToggle = { viewModel.updateTask(task) },
+                                    onEdit = { newContent ->
+                                        viewModel.updateTaskContent(task.id, newContent)
+                                    },
+                                    onDelete = {
+                                        viewModel.deleteTask(task)
+                                    },
+                                    elevation = elevation,
+                                    dragModifier = Modifier.draggableHandle()
+                                )
+                            }
                         }
                     }
                 }
             }
-            }
         }
-    }
 
-    // Delete Confirmation Dialog
-    if (showDeleteConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { Text("Delete Topic?") },
-            text = {
-                Text("Are you sure you want to delete \"${topic.name}\" and all its tasks? This action cannot be undone.")
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.deleteTopic(topic.id) {
-                            onBackPressed()
-                        }
-                        showDeleteConfirmDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DarkRed)
-                ) {
-                    Text("Delete", color = Color.White)
+        // Delete Confirmation Dialog
+        if (showDeleteConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmDialog = false },
+                title = { Text("Delete Topic?") },
+                text = {
+                    Text("Are you sure you want to delete \"${topic.name}\" and all its tasks? This action cannot be undone.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.deleteTopic(topic.id) {
+                                onBackPressed()
+                            }
+                            showDeleteConfirmDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DarkRed)
+                    ) {
+                        Text("Delete", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    Button(onClick = { showDeleteConfirmDialog = false }) {
+                        Text("Cancel")
+                    }
                 }
-            },
-            dismissButton = {
-                Button(onClick = { showDeleteConfirmDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
+            )
+        }
     }
 }
 
@@ -350,8 +358,8 @@ fun TaskItem(
     onToggle: () -> Unit,
     onEdit: (String) -> Unit,
     onDelete: () -> Unit,
-    elevation: Dp = 2.dp,
     modifier: Modifier = Modifier,
+    elevation: Dp = 2.dp,
     dragModifier: Modifier = Modifier
 ) {
     var showEditDialog by remember { mutableStateOf(false) }
@@ -452,3 +460,5 @@ fun TaskItem(
         )
     }
 }
+
+

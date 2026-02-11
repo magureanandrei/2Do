@@ -84,17 +84,12 @@ fun TopicSelectionScreen(
                 style = MaterialTheme.typography.headlineMedium
             )
 
-            // Sync Indicator (Spinner)
-            if (isSyncing) {
-                Spacer(modifier = Modifier.width(12.dp))
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
             Spacer(modifier = Modifier.weight(1f))
+
+            // Sync Indicator
+            SyncStatusIcon(isSyncing = isSyncing)
+
+            Spacer(modifier = Modifier.width(12.dp))
 
             // Archive Button
             IconButton(onClick = onArchiveClicked) {
